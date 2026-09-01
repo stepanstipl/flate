@@ -36,6 +36,14 @@ type Fetcher struct {
 	Cache          *source.Cache
 	RegistryConfig string
 	Secrets        source.SecretGetter
+
+	// ForceGeneric routes non-generic spec.provider values (aws, azure,
+	// gcp) through the generic SecretRef / --registry-config credential
+	// path instead of failing up front; offline that usually degrades to
+	// "auth secret not found", which --allow-missing-secrets then
+	// soft-skips. Set from Config.ForceGenericProvider
+	// (--force-generic-provider).
+	ForceGeneric bool
 }
 
 // Fetch implements source.TypedFetcher[*manifest.OCIRepository].
@@ -47,7 +55,7 @@ type Fetcher struct {
 // fields, then hands off to fetch() — the workhorse in fetch.go that
 // owns slot lifecycle, oras Copy, layer extraction, and marker writes.
 func (f *Fetcher) Fetch(ctx context.Context, repo *manifest.OCIRepository) (*store.SourceArtifact, error) {
-	if repo.Provider != "" && repo.Provider != sourcev1.GenericOCIProvider {
+	if !f.ForceGeneric && repo.Provider != "" && repo.Provider != sourcev1.GenericOCIProvider {
 		return nil, source.ErrUnsupportedProvider("OCIRepository",
 			repo.Namespace, repo.Name, repo.Provider, sourcev1.GenericOCIProvider,
 			"SecretRef or --registry-config credentials")

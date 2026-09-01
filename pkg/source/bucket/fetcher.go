@@ -23,12 +23,19 @@ import (
 type Fetcher struct {
 	Cache   *source.Cache
 	Secrets source.SecretGetter
+
+	// ForceGeneric routes non-generic spec.provider values (aws, gcp,
+	// azure) through the generic S3-compatible SecretRef path instead of
+	// failing up front; offline that usually degrades to "auth secret not
+	// found", which --allow-missing-secrets then soft-skips. Set from
+	// Config.ForceGenericProvider (--force-generic-provider).
+	ForceGeneric bool
 }
 
 // Fetch implements source.TypedFetcher[*manifest.Bucket]. The typed
 // signature is wrapped via source.Wrap at orchestrator registration.
 func (f *Fetcher) Fetch(ctx context.Context, b *manifest.Bucket) (*store.SourceArtifact, error) {
-	if b.Provider != "" && b.Provider != sourcev1.BucketProviderGeneric {
+	if !f.ForceGeneric && b.Provider != "" && b.Provider != sourcev1.BucketProviderGeneric {
 		return nil, source.ErrUnsupportedProvider("Bucket",
 			b.Namespace, b.Name, b.Provider, sourcev1.BucketProviderGeneric,
 			"S3-compatible")

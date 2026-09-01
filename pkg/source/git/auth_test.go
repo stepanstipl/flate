@@ -2,9 +2,11 @@ package git
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
+	meta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 
@@ -164,5 +166,32 @@ func TestIsSSHURL(t *testing.T) {
 		if isSSHURL(u) {
 			t.Errorf("isSSHURL(%q) = true, want false", u)
 		}
+	}
+}
+
+func TestFetcher_ForceGenericProvider(t *testing.T) {
+	// --force-generic-provider: the provider gate is bypassed and the
+	// generic SecretRef path runs instead — here the secret is absent, so
+	// the error is the ErrMissingSecret shape --allow-missing-secrets (or
+	// a producer match) soft-skips, not the up-front provider rejection.
+	f := &Fetcher{
+		ForceGeneric: true,
+		Secrets:      func(_, _ string) *manifest.Secret { return nil },
+	}
+	repo := &manifest.GitRepository{
+		Name: "g", Namespace: "ns",
+		URL:      "https://github.com/x/y.git",
+		Provider: sourcev1.GitProviderGitHub,
+	}
+	repo.SecretRef = &meta.LocalObjectReference{Name: "creds"}
+	_, err := f.Fetch(context.Background(), repo)
+	if err == nil {
+		t.Fatalf("expected missing-secret error")
+	}
+	if strings.Contains(err.Error(), "not implemented") {
+		t.Errorf("provider gate should be bypassed with ForceGeneric; got %v", err)
+	}
+	if !errors.Is(err, manifest.ErrMissingSecret) {
+		t.Errorf("want ErrMissingSecret from the generic path; got %v", err)
 	}
 }

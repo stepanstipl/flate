@@ -40,18 +40,19 @@ type commonFlags struct {
 	// baseline side) are threaded explicitly rather than re-derived from a
 	// .git. Empty for an explicit --path-orig (the CLI defaults the root
 	// via repoRootOf and lets the side read its own .git remotes).
-	pathOrigRoot        string
-	pathOrigSelfURLs    []string
-	base                string
-	namespace           string
-	skipCRDs            bool
-	skipSecrets         bool
-	allowMissingSecrets bool
-	restrictEgress      bool
-	skipKinds           []string
-	output              string
-	registryConfig      string
-	concurrency         int
+	pathOrigRoot         string
+	pathOrigSelfURLs     []string
+	base                 string
+	namespace            string
+	skipCRDs             bool
+	skipSecrets          bool
+	allowMissingSecrets  bool
+	forceGenericProvider bool
+	restrictEgress       bool
+	skipKinds            []string
+	output               string
+	registryConfig       string
+	concurrency          int
 	// sourceRetry* tune the bounded retry applied uniformly to every source
 	// fetch on transient network errors. attempts is the total tries (first +
 	// retries); 1 disables. min/max bound the exponential backoff and jitter
@@ -113,6 +114,12 @@ func bindCommon(fs *pflag.FlagSet, f *commonFlags, outputs ...format.Output) {
 		"limit to this namespace (default: every namespace, or just the changed ones when --path-orig is set)")
 	fs.BoolVar(&f.skipCRDs, "skip-crds", true, "exclude CRD objects from rendered output")
 	fs.BoolVar(&f.skipSecrets, "skip-secrets", true, "exclude Secret objects from rendered output")
+	fs.BoolVar(&f.forceGenericProvider, "force-generic-provider", false,
+		"route non-generic spec.provider values on GitRepository/OCIRepository/Bucket "+
+			"sources through the generic SecretRef credential path instead of failing. "+
+			"The cloud/workload-identity flows those providers imply exist only in a live "+
+			"cluster; offline this usually degrades to a missing auth Secret, which "+
+			"--allow-missing-secrets then soft-skips.")
 	fs.BoolVar(&f.allowMissingSecrets, "allow-missing-secrets", false,
 		"soft-skip ALL source auth Secrets and HelmRelease valuesFrom Secret/ConfigMap refs "+
 			"that only materialize in the live cluster. Usually unnecessary: a missing Secret "+
@@ -430,6 +437,7 @@ func buildOrchCfg(c commonFlags, h helmFlags) orchestrator.Config {
 		},
 		GitDepth:                  c.gitDepth,
 		AllowMissingSecrets:       c.allowMissingSecrets,
+		ForceGenericProvider:      c.forceGenericProvider,
 		RestrictEgress:            c.restrictEgress,
 		CacheDir:                  c.resolveCacheRoot(),
 		HelmTemplateCacheBytes:    int64(c.helmTemplateCacheMB) << 20,

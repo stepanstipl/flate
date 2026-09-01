@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	meta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 
 	"github.com/home-operations/flate/internal/testutil"
@@ -223,5 +224,30 @@ func TestFetcher_ResolveConfig_SecretNotFound(t *testing.T) {
 	}
 	if !errors.Is(err, manifest.ErrMissingSecret) {
 		t.Errorf("expected ErrMissingSecret wrap; got %v", err)
+	}
+}
+
+func TestFetcher_ForceGenericProvider(t *testing.T) {
+	// --force-generic-provider: the provider gate is bypassed and the
+	// generic SecretRef path runs; the secret is absent, so the error is
+	// the ErrMissingSecret shape --allow-missing-secrets soft-skips.
+	f := &Fetcher{
+		ForceGeneric: true,
+		Secrets:      func(_, _ string) *manifest.Secret { return nil },
+	}
+	repo := ociRepo("o", func(s *sourcev1.OCIRepositorySpec) {
+		s.URL = "oci://ghcr.io/x/y"
+		s.Provider = sourcev1.AmazonOCIProvider
+		s.SecretRef = &meta.LocalObjectReference{Name: "creds"}
+	})
+	_, err := f.Fetch(context.Background(), repo)
+	if err == nil {
+		t.Fatalf("expected missing-secret error")
+	}
+	if strings.Contains(err.Error(), "not implemented") {
+		t.Errorf("provider gate should be bypassed with ForceGeneric; got %v", err)
+	}
+	if !errors.Is(err, manifest.ErrMissingSecret) {
+		t.Errorf("want ErrMissingSecret from the generic path; got %v", err)
 	}
 }

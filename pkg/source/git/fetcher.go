@@ -70,6 +70,14 @@ type Fetcher struct {
 	// (local fixtures, the synthetic self-source — which is pre-seeded and
 	// never reaches this fetch path anyway). Default false.
 	RestrictSchemes bool
+
+	// ForceGeneric routes non-generic spec.provider values (github, azure,
+	// gcp) through the generic SecretRef credential path instead of failing
+	// up front — the workload-identity/App token minting those providers
+	// imply only exists in a live cluster. Offline that usually degrades to
+	// "auth secret not found", which --allow-missing-secrets then soft-skips.
+	// Set from Config.ForceGenericProvider (--force-generic-provider).
+	ForceGeneric bool
 }
 
 // Fetch implements source.TypedFetcher[*manifest.GitRepository].
@@ -77,7 +85,7 @@ type Fetcher struct {
 // registration — a payload mismatch returns ErrInput once at the
 // adapter site rather than panicking here.
 func (f *Fetcher) Fetch(ctx context.Context, repo *manifest.GitRepository) (*store.SourceArtifact, error) {
-	if repo.Provider != "" && repo.Provider != sourcev1.GitProviderGeneric {
+	if !f.ForceGeneric && repo.Provider != "" && repo.Provider != sourcev1.GitProviderGeneric {
 		return nil, source.ErrUnsupportedProvider("GitRepository",
 			repo.Namespace, repo.Name, repo.Provider, sourcev1.GitProviderGeneric,
 			"SecretRef-based credentials")
